@@ -1,0 +1,46 @@
+{
+  "name": "mp4-wasm",
+  "version": "1.0.0",
+  "description": "fast MP4 mux / demux using WASM",
+  "license": "MIT",
+  "author": {
+    "name": "Matt DesLauriers",
+    "email": "dave.des@gmail.com",
+    "url": "https://github.com/mattdesl"
+  },
+  "main": "./build/mp4.node.js",
+  "unpkg": "./build/mp4.js",
+  "jsdelivr": "./build/mp4.js",
+  "module": "./build/mp4.js",
+  "browser": "./build/mp4.js",
+  "dependencies": {},
+  "devDependencies": {
+    "esbuild": "^0.8.44",
+    "rimraf": "^3.0.2",
+    "serve": "^11.3.2"
+  },
+  "scripts": {
+    "test": "serve .",
+    "build": "npm run clean && npm run build:wasm && npm run bundle:web && npm run bundle:node",
+    "clean": "rimraf build && mkdir build",
+    "build:wasm": "./build.sh",
+    "bundle:web": "esbuild embuild/mp4.js --bundle --outfile=build/mp4.js --minify --sourcemap --format=esm",
+    "bundle:node": "esbuild embuild/mp4.node.js --bundle --outfile=build/mp4.node.js --platform=node --minify --sourcemap --format=cjs"
+  },
+  "keywords": [
+    "mux",
+    "demux",
+    "h264",
+    "mp4",
+    "encode",
+    "decode"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mattdesl/mp4-wasm.git"
+  },
+  "homepage": "https://github.com/mattdesl/mp4-wasm",
+  "bugs": {
+    "url": "https://github.com/mattdesl/mp4-wasm/issues"
+  }
+}

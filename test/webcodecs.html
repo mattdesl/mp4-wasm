@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        padding: 20px;
+        font-size: 14px;
+        font-family: "Helvetica", sans-serif;
+      }
+      p {
+        padding: 0px;
+        margin: 0;
+      }
+      .unsupported {
+        line-height: 2;
+        padding: 10px;
+        color: red;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div>Encoding 240 frames at 1920x1080</div>
+    <div class='unsupported' style='display: none'>
+      <p>Error: This browser doesn't support WebCodecs.</p>
+      <p>The demo only works in Chrome Canary with WebCodecs enabled:</p>
+      <p><code>chrome://flags/#enable-experimental-web-platform-features</code></p>
+    </div>
+    <br />
+    <canvas
+    style="width: 20vw; height: auto; border: 1px solid black"
+    ></canvas>
+    <script type="module" src="./webcodecs.js"></script>
+  </body>
+</html>
