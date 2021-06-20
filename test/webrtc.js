@@ -1,4 +1,8 @@
 import loadMP4Module, { isWebCodecsSupported } from "/build/mp4.js";
+import "https://unpkg.com/simple-peer@9.9.3/simplepeer.min.js";
+const START_CODE = new Uint8Array([0, 0, 0, 1]);
+
+console.log(SimplePeer);
 
 const width = 1920;
 const height = 1080;
@@ -82,165 +86,249 @@ async function start() {
   let frame = 0;
   let totalFrames = Math.round(fps * duration);
 
+  const offerOptions = {
+    offerToReceiveAudio: 0,
+    offerToReceiveVideo: 1,
+  };
   const stream = recordCanvas.captureStream(0);
-  const recorder = new MediaRecorder(stream, {
-    // mimeType: "video/webm",
-    // mimeType: "video/webm;codecs=h264",
-  });
-
-  const track = stream.getVideoTracks()[0];
+  const [track] = stream.getTracks();
+  const log = console.log.bind(console);
+  let interval = 100;
+  let pc1, pc2;
   const chunks = [];
-  recorder.ondataavailable = async ({ data }) => {
-    // const buf = await data.arrayBuffer();
-    // const uint8 = new Uint8Array(buf);
-    // console.log("got data", uint8);
-    chunks.push(data);
-    console.log(data);
-  };
-  recorder.onstop = () => {
-    console.log("STOPPED!");
-    show(new Blob(chunks, { type: "video/webm" }), "test.webm");
-  };
 
-  drawRealFrame(recordCtx, 0, 0);
-  recorder.start(0);
-  waitForEvent(recorder, "start").then(() => {
-    recorder.pause();
-  });
-  recorder.pause();
+  call();
 
-  let interval = 50;
-  setTimeout(loop, 0);
-  console.time("encode");
+  function getName(pc) {
+    return pc === pc1 ? "pc1" : "pc2";
+  }
+
+  function getOtherPc(pc) {
+    return pc === pc1 ? pc2 : pc1;
+  }
+
+  async function call() {
+    pc1 = new RTCPeerConnection();
+    // const transceiver = pc1.addTransceiver("video");
+
+    console.log("Created local peer connection object pc1");
+    pc1.addEventListener("icecandidate", (e) => onIceCandidate(pc1, e));
+    pc2 = new RTCPeerConnection({
+      encodedInsertableStreams: true,
+    });
+    console.log("Created remote peer connection object pc2");
+    pc2.addEventListener("icecandidate", (e) => onIceCandidate(pc2, e));
+    pc1.addEventListener("iceconnectionstatechange", (e) =>
+      onIceStateChange(pc1, e)
+    );
+    pc2.addEventListener("iceconnectionstatechange", (e) =>
+      onIceStateChange(pc2, e)
+    );
+    pc2.addEventListener("track", gotRemoteTrack);
+
+    // const transceiver = pc1.addTransceiver("video");
+    // const sender = transceiver.sender;
+    // sender.replaceTrack(track);
+
+    pc1.addTrack(track, stream);
+    // const transceiver = pc1.addTransceiver("video");
+    // console.log(transceiver.sender.getCapabilities("video").codecs);
+    // transceiver.setCodecPreferences([
+    //   ...RTCRtpSender.getCapabilities("video").codecs,
+    // {
+    //   clockRate: 90000,
+    //   mimeType: "video/H264",
+    //   sdpFmtpLine:
+    //     "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d0032",
+    // },
+    // ]);
+    // stream.getTracks().forEach((track) => pc1.addTrack(track, stream));
+    console.log("Added local stream to pc1");
+
+    try {
+      console.log("pc1 createOffer start");
+      const offer = await pc1.createOffer(offerOptions);
+      await onCreateOfferSuccess(offer);
+    } catch (e) {
+      onCreateSessionDescriptionError(e);
+    }
+  }
+
+  function onCreateSessionDescriptionError(error) {
+    console.log(`Failed to create session description: ${error.toString()}`);
+  }
+
+  async function onCreateOfferSuccess(desc) {
+    console.log(`Offer from pc1\n${desc.sdp}`);
+    console.log("pc1 setLocalDescription start");
+    try {
+      await pc1.setLocalDescription(desc);
+      onSetLocalSuccess(pc1);
+    } catch (e) {
+      onSetSessionDescriptionError();
+    }
+
+    console.log("pc2 setRemoteDescription start");
+    try {
+      await pc2.setRemoteDescription({
+        type: "offer",
+        sdp: desc.sdp.replace("red/90000", "green/90000"),
+      });
+      onSetRemoteSuccess(pc2);
+    } catch (e) {
+      onSetSessionDescriptionError();
+    }
+
+    console.log("pc2 createAnswer start");
+    try {
+      const answer = await pc2.createAnswer(offerOptions);
+      answer.sdp = answer.sdp.replace(
+        "useinbandfec=1",
+        "useinbandfec=1; stereo=1; maxaveragebitrate=510000"
+      );
+      await onCreateAnswerSuccess(answer);
+    } catch (e) {
+      onCreateSessionDescriptionError(e);
+    }
+
+    console.log("ready for things!!");
+    startEncoding();
+  }
+
+  function onSetLocalSuccess(pc) {
+    console.log(`${getName(pc)} setLocalDescription complete`);
+  }
+
+  function onSetRemoteSuccess(pc) {
+    console.log(`${getName(pc)} setRemoteDescription complete`);
+  }
+
+  function onSetSessionDescriptionError(error) {
+    console.log(`Failed to set session description: ${error.toString()}`);
+  }
+
+  function gotRemoteTrack(e) {
+    console.log("pc2 received remote stream");
+
+    const frameStreams = e.receiver.createEncodedStreams();
+    const reader = frameStreams.readable || frameStreams.readableStream;
+    const writer = frameStreams.writable || frameStreams.writableStream;
+    reader
+      .pipeThrough(
+        new TransformStream({
+          transform: videoAnalyzer,
+        })
+      )
+      .pipeTo(writer);
+
+    // new WritableStream({
+    //   write(value, controller) {
+    //     console.log("writing", value);
+    //     writer.write(value);
+    //   },
+    // })
+
+    const video = document.querySelector("video");
+    video.muted = true;
+    video.autoplay = false;
+    video.srcObject = e.streams[0];
+    video.play();
+  }
+
+  function videoAnalyzer(encodedFrame, controller) {
+    // console.log(frame);
+    // console.log(encodedFrame);
+    chunks.push(new Uint8Array([0, 0, 0, 1]).buffer);
+    chunks.push(encodedFrame.data);
+    controller.enqueue(encodedFrame);
+  }
+
+  async function onCreateAnswerSuccess(desc) {
+    console.log(`Answer from pc2:\n${desc.sdp}`);
+    console.log("pc2 setLocalDescription start");
+    try {
+      await pc2.setLocalDescription(desc);
+      onSetLocalSuccess(pc2);
+    } catch (e) {
+      onSetSessionDescriptionError(e);
+    }
+    console.log("pc1 setRemoteDescription start");
+    try {
+      await pc1.setRemoteDescription(desc);
+      onSetRemoteSuccess(pc1);
+    } catch (e) {
+      onSetSessionDescriptionError(e);
+    }
+  }
+
+  async function onIceCandidate(pc, event) {
+    try {
+      await getOtherPc(pc).addIceCandidate(event.candidate);
+      onAddIceCandidateSuccess(pc);
+    } catch (e) {
+      onAddIceCandidateError(pc, e);
+    }
+    console.log(
+      `${getName(pc)} ICE candidate:\n${
+        event.candidate ? event.candidate.candidate : "(null)"
+      }`
+    );
+  }
+
+  function onAddIceCandidateSuccess(pc) {
+    console.log(`${getName(pc)} addIceCandidate success`);
+  }
+
+  function onAddIceCandidateError(pc, error) {
+    console.log(
+      `${getName(pc)} failed to add ICE Candidate: ${error.toString()}`
+    );
+  }
+
+  function onIceStateChange(pc, event) {
+    if (pc) {
+      console.log(`${getName(pc)} ICE state: ${pc.iceConnectionState}`);
+      console.log("ICE state change event: ", event);
+    }
+  }
+
+  async function once(p, name) {
+    return new Promise((resolve) => p.once(name, resolve));
+  }
+
+  function startEncoding() {
+    setTimeout(loop, 0);
+    console.time("encode");
+  }
 
   function requestFrame() {
-    // if (typeof track.requestFrame === "function") {
-    //   track.requestFrame();
-    // } else if (typeof stream.requestFrame === "function") {
-    //   stream.requestFrame();
-    // }
     return new Promise((resolve) => {
-      window.queueMicrotask(() => {
-        if (typeof track.requestFrame === "function") {
-          track.requestFrame();
-        } else if (typeof stream.requestFrame === "function") {
-          stream.requestFrame();
-        }
-        resolve();
-      });
+      const track = stream.getTracks()[0];
+      if (typeof track.requestFrame === "function") {
+        track.requestFrame();
+      } else if (typeof stream.requestFrame === "function") {
+        stream.requestFrame();
+      }
     });
   }
 
   async function finish() {
-    // Get an Uint8Array buffer
-    // const buf = await encoder.end();
-    setTimeout(() => {});
-    // recorder.requestData();
-    recorder.stop();
     console.timeEnd("encode");
-    // setTimeout(() => {
-    //   console.log("done");
-    //   // show(new Blob(chunks, { type: "video/webm" }));
-    // }, 100);
-    // show(new Blob(chunks, { type: "video/webm" }));
-    // show(buf, width, height);
-  }
-
-  async function pause() {
-    if (recorder.state === "paused") return Promise.resolve();
-    recorder.pause();
-    return waitForEvent(recorder, "pause");
-  }
-
-  async function resume() {
-    if (recorder.state !== "paused") return Promise.resolve();
-    recorder.resume();
-    return waitForEvent(recorder, "resume");
-  }
-
-  function waitForEvent(p, event) {
-    return new Promise((resolve) => {
-      function result() {
-        p.removeEventListener(event, result);
-        resolve();
-      }
-      p.addEventListener(event, result, false);
-    });
+    download(new Blob(chunks, { type: "video/h264" }));
   }
 
   async function draw() {
-    // console.log("Encoding frame %d of %d", frame + 1, totalFrames);
-
-    // recorder.ondataavailable = async ({ data }) => {
-    //   recorder.pause();
-    //   console.log("got blob", data);
-    //   const buf = await data.arrayBuffer();
-    //   const uint8 = new Uint8Array(buf);
-    //   console.log(uint8);
-    //   frame++;
-    //   setTimeout(loop, interval);
-    // };
-
-    // const timer = new Promise((resolve) => setTimeout(1000 / fps));
-
-    // await resume();
-
-    // Render the canvas first
-
-    // window.queueMicrotask(() => {
-    //   drawFrame(frame / (totalFrames - 1));
-    // });
-    // requestFrame();
-    // track.enabled = true;
-    // recorder.resume();
-
-    // const timer = new Promise((resolve) => setTimeout(resolve, 1000 / fps));
     let curFrame = frame;
     const t = curFrame / (totalFrames - 1);
     drawRealFrame(ctx, curFrame, t);
 
     recordCtx.clearRect(0, 0, canvas.width, canvas.height);
     recordCtx.drawImage(canvas, 0, 0);
-
-    drawInBetweenFrame(ctx, curFrame, t);
-
-    resume();
     requestFrame();
-    const timer = new Promise((resolve) => setTimeout(resolve, 1000 / fps));
-    await timer;
-    pause();
-    recorder.requestData();
+
     frame++;
-    // requestAnimationFrame(loop);
     setTimeout(loop, interval);
-
-    // track.enabled = true;
-    // window.queueMicrotask(() => {
-    // recorder.requestData();
-    // });
-
-    // recorder.requestData();
-    // recorder.onresume = () => {
-    //   setTimeout(() => {
-    //     recorder.requestData();
-    //     recorder.pause();
-    //   }, 1000 / fps);
-    // };
-    // recorder.resume();
-
-    // recorder.resume();
-    // // Create a bitmap out of the frame
-    // const bitmap = await createImageBitmap(canvas);
-
-    // // Add bitmap to encoder
-    // await encoder.addFrame(bitmap);
-
-    // Trigger next frame loop
-    // requestAnimationFrame(loop);
   }
-
-  // Start encoding loop
-  // requestAnimationFrame(loop);
 
   async function loop() {
     if (frame < totalFrames) {

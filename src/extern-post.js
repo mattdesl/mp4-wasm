@@ -69,6 +69,7 @@ export function createWebCodecsEncoderWithModule(MP4, opts = {}) {
     acceleration,
     bitrate,
     error = defaultError,
+    encoderOptions = {},
     flushFrequency = 10,
   } = opts;
 
@@ -106,8 +107,9 @@ export function createWebCodecsEncoderWithModule(MP4, opts = {}) {
     avc: {
       format,
     },
-    acceleration,
+    hardwareAcceleration: acceleration,
     bitrate,
+    ...encoderOptions,
   };
 
   let frameIndex = 0;

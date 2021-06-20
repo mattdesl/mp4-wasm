@@ -13,7 +13,6 @@
   "jsdelivr": "./build/mp4.js",
   "module": "./build/mp4.js",
   "browser": "./build/mp4.js",
-  "dependencies": {},
   "devDependencies": {
     "esbuild": "^0.8.44",
     "rimraf": "^3.0.2",
