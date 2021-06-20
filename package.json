@@ -1,6 +1,6 @@
 {
   "name": "mp4-wasm",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "fast MP4 mux / demux using WASM",
   "license": "MIT",
   "author": {
