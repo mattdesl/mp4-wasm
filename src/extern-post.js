@@ -185,10 +185,14 @@ export function createWebCodecsEncoderWithModule(MP4, opts = {}) {
     }
 
     if (format === "annexb") {
-      nal.push(new Uint8Array(chunk.data));
+      const uint8 = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(uint8);
+      nal.push(uint8);
     } else {
       try {
-        convertAVCToAnnexBInPlaceForLength4(chunk.data).forEach((sub) => {
+        const arrayBuf = new ArrayBuffer(chunk.byteLength);
+        chunk.copyTo(arrayBuf);
+        convertAVCToAnnexBInPlaceForLength4(arrayBuf).forEach((sub) => {
           nal.push(START_CODE);
           nal.push(sub);
         });
