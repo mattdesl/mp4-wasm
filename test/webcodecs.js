@@ -59,7 +59,15 @@ async function start() {
   console.time("encode");
 
   const MP4 = await loadMP4Module();
-  const encoder = MP4.createWebCodecsEncoder({ width, height, fps });
+  const encoder = MP4.createWebCodecsEncoder({
+    width,
+    height,
+    fps,
+    // groupOfPictures: fps,
+    // sequential: true,
+    // format: "avc",
+    // codec: "avc1.420034",
+  });
 
   // Start encoding loop
   requestAnimationFrame(loop);
