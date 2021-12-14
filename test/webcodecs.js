@@ -63,7 +63,10 @@ async function start() {
     width,
     height,
     fps,
-    // groupOfPictures: fps,
+    encoderOptions: {
+      framerate: 30,
+    },
+    // groupOfPictures: 2,
     // sequential: true,
     // format: "avc",
     // codec: "avc1.420034",

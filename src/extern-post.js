@@ -108,6 +108,8 @@ export function createWebCodecsEncoderWithModule(MP4, opts = {}) {
       format,
     },
     hardwareAcceleration: acceleration,
+    // There is a bug on macOS if this is greater than 30 fps
+    // framerate: fps,
     bitrate,
     ...encoderOptions,
   };
