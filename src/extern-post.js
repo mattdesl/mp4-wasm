@@ -163,9 +163,20 @@ export function createWebCodecsEncoderWithModule(MP4, opts = {}) {
 
   function writeAVC(chunk, opts) {
     let avccConfig = null;
-    if (opts.description) {
+
+    let description;
+    if (opts) {
+      if (opts.description) {
+        description = opts.description;
+      }
+      if (opts.decoderConfig && opts.decoderConfig.description) {
+        description = opts.decoderConfig.description;
+      }
+    }
+
+    if (description) {
       try {
-        avccConfig = parseAVCC(opts.description);
+        avccConfig = parseAVCC(description);
       } catch (err) {
         error(err);
         return;
