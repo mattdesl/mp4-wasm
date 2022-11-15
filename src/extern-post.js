@@ -131,9 +131,13 @@ export function createWebCodecsEncoderWithModule(MP4, opts = {}) {
       MP4.finalize_muxer(mux);
       return file.contents();
     },
-    async addFrame(bitmap) {
+    async addFrame(bitmap, opts) {
+      opts = opts || {};
       const timestamp = (1 / fps) * frameIndex * 1000000;
-      const keyFrame = frameIndex % groupOfPictures === 0;
+      let { keyFrame } = opts;
+      if (keyFrame === undefined) {
+        keyFrame = groupOfPictures > 0 && frameIndex % groupOfPictures === 0;
+      }
       let frame = new VideoFrame(bitmap, { timestamp });
       encoder.encode(frame, { keyFrame });
       frame.close();
